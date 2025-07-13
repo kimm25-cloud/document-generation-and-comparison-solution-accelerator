@@ -188,6 +188,18 @@ module cosmosDBModule 'deploy_cosmos_db.bicep' = {
   scope: resourceGroup(resourceGroup().name)
 }
 
+// ========== Document Intelligence Module ========== //
+module documentIntelligenceModule 'deploy_document_intelligence.bicep' = {
+  name: 'deploy_document_intelligence'
+  params: {
+    solutionName: solutionPrefix
+    solutionLocation: solutionLocation
+    managedIdentityObjectId: managedIdentityModule.outputs.managedIdentityOutput.objectId
+    keyVaultName: kvault.outputs.keyvaultName
+  }
+  scope: resourceGroup(resourceGroup().name)
+}
+
 output STORAGE_ACCOUNT_NAME string = storageAccount.outputs.storageName
 output STORAGE_CONTAINER_NAME string = storageAccount.outputs.storageContainer
 output KEY_VAULT_NAME string = kvault.outputs.keyvaultName
@@ -196,3 +208,4 @@ output RESOURCE_GROUP_NAME string = resourceGroup().name
 output AI_FOUNDRY_NAME string = aifoundry.outputs.aiFoundryName
 output AI_SEARCH_SERVICE_NAME string = aifoundry.outputs.aiSearchService
 output AZURE_SEARCH_CONNECTION_NAME string = aifoundry.outputs.aiSearchConnectionName
+output DOCUMENT_INTELLIGENCE_NAME string = documentIntelligenceModule.outputs.documentIntelligenceName
