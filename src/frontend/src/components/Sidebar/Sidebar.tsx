@@ -52,6 +52,12 @@ const NavigationButton = ({ text, buttonState, onClick }: NavigationButtonProps)
         color={fontColor}
         cursor={buttonState === NavigationButtonStates.Disabled ? 'not-allowed' : 'pointer'}
       />
+    ),
+    Compare: (
+      <BookRegular
+        color={fontColor}
+        cursor={buttonState === NavigationButtonStates.Disabled ? 'not-allowed' : 'pointer'}
+      />
     )
   }
 
@@ -171,6 +177,21 @@ const Sidebar = (): JSX.Element => {
          
           onClick={() => {
             navigate('/draft')
+          }}
+        />
+        <NavigationButton
+          text={'Compare'}
+          buttonState={
+            currentView === 'compare'
+              ? NavigationButtonStates.Active
+              : appStateContext?.state.isRequestInitiated
+                ? NavigationButtonStates.Disabled
+                : NavigationButtonStates.Inactive
+          }
+          onClick={() => {
+            if (!isGenerating) {
+              navigate('/compare')
+            }
           }}
         />
       </Stack>

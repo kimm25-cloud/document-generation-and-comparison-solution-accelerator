@@ -121,6 +121,9 @@ const Layout = () => {
             <Link to="/" className={styles.headerTitleContainer}>
               <h1 className={styles.headerTitle}>{ui?.title}</h1>
             </Link>
+            <Link to="/compare" className={styles.headerTitleContainer} style={{ marginLeft: '1rem' }}>
+              <h2 className={styles.headerTitle} style={{ fontSize: '1.25rem', fontWeight: 500 }}>Compare</h2>
+            </Link>
           </Stack>
           <Stack horizontal tokens={{ childrenGap: 4 }} className={styles.shareButtonContainer}>
             {shouldShowHistoryButton && appStateContext?.state.isCosmosDBAvailable?.status !== CosmosDBStatus.NotConfigured && (

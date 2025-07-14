@@ -1,0 +1,114 @@
+.compareRoot {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  margin: 20px;
+  gap: 20px;
+}
+
+.compareContainer {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: radial-gradient(108.78% 108.78% at 50.02% 19.78%, #ffffff 57.29%, #eef6fe 100%);
+  border-radius: 8px;
+  overflow-y: auto;
+  max-height: calc(100vh - 100px);
+  padding: 32px;
+}
+
+.compareTitle {
+  font-style: normal;
+  font-weight: 700;
+  font-size: 32px;
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.compareForm {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  max-width: 500px;
+  margin: 0 auto;
+}
+
+.compareLabel {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.compareInput {
+  margin-bottom: 16px;
+}
+
+.compareButton {
+  padding: 10px 24px;
+  background: #367AF6;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.compareButton:disabled {
+  background: #BEBBB8;
+  cursor: not-allowed;
+}
+
+.compareError {
+  color: #b63443;
+  font-weight: 600;
+  margin-top: 12px;
+}
+
+.compareResult {
+  margin-top: 32px;
+  width: 100%;
+  max-width: 700px;
+}
+
+.compareScore {
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 16px;
+}
+
+.compareTable {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 16px;
+}
+
+.compareTable th,
+.compareTable td {
+  border: 1px solid #d1d1d1;
+  padding: 8px;
+  text-align: left;
+}
+
+.compareTable th {
+  background: #edf5fd;
+  font-weight: 600;
+}
+
+.compareTable tr:nth-child(even) {
+  background: #f7fafd;
+}
+
+@media (max-width: 480px) {
+  .compareContainer {
+    padding: 8px;
+    max-height: 100vh;
+  }
+  .compareForm {
+    max-width: 100%;
+  }
+  .compareResult {
+    max-width: 100%;
+  }
+}
