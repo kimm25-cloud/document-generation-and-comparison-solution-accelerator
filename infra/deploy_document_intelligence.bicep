@@ -34,7 +34,7 @@ resource documentIntelligence 'Microsoft.CognitiveServices/accounts@2023-05-01' 
 
 // Role assignment for managed identity to access Document Intelligence
 resource documentIntelligenceRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(documentIntelligence.id, managedIdentityObjectId, 'a97b65f3-24c7-4388-baec-2e87135dc908')
+  name: guid(documentIntelligence.id, managedIdentityObjectId, 'cognitive-services-user')
   scope: documentIntelligence
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'a97b65f3-24c7-4388-baec-2e87135dc908') // Cognitive Services User
