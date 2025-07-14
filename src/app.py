@@ -238,9 +238,9 @@ async def init_ai_foundry_client():
         )
         return ai_foundry_client
     except Exception as e:
-        logging.exception("Exception in AI Foundry initialization", e)
+        logging.exception("Exception in AI Foundry initialization: %s", e)
         ai_foundry_client = None
-        raise e
+        raise 
 
 
 def init_cosmosdb_client():
