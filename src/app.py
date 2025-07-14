@@ -25,7 +25,7 @@ async def compare_documents():
     doc_client = DocumentIntelligenceClient(endpoint, AzureKeyCredential(key))
     async def extract_sections(file_path):
         with open(file_path, "rb") as f:
-            poller = await doc_client.begin_analyze_document("prebuilt-read", f)
+            poller = await doc_client.begin_analyze_document("prebuilt-read", body=f)
             result = await poller.result()
         # Group by paragraphs or headings
         sections = []
