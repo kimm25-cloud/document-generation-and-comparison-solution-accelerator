@@ -136,10 +136,7 @@ module storageAccount 'deploy_storage_account.bicep' = {
 }
 
 //========== Updates to Key Vault ========== //
-resource keyVault 'Microsoft.KeyVault/vaults@2022-07-01' existing = {
-  name: aifoundry.outputs.keyvaultName
-  scope: resourceGroup(resourceGroup().name)
-}
+// Removed unused existing keyVault resource declaration
 
 //========== App service module ========== //
 module appserviceModule 'deploy_app_service.bicep' = {
@@ -209,3 +206,5 @@ output AI_FOUNDRY_NAME string = aifoundry.outputs.aiFoundryName
 output AI_SEARCH_SERVICE_NAME string = aifoundry.outputs.aiSearchService
 output AZURE_SEARCH_CONNECTION_NAME string = aifoundry.outputs.aiSearchConnectionName
 output DOCUMENT_INTELLIGENCE_NAME string = documentIntelligenceModule.outputs.documentIntelligenceName
+
+

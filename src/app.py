@@ -1,3 +1,83 @@
+from azure.ai.documentintelligence.aio import DocumentIntelligenceClient
+from azure.core.credentials import AzureKeyCredential
+# Semantic Document Comparison API
+@bp.route("/compare-documents", methods=["POST"])
+async def compare_documents():
+    data = await request.files
+    reference_file = data.get("reference")
+    candidate_file = data.get("candidate")
+    if not reference_file or not candidate_file:
+        return jsonify({"error": "Both reference and candidate documents are required."}), 400
+
+    # Save files temporarily
+    ref_path = f"/tmp/{uuid.uuid4()}_reference.pdf"
+    cand_path = f"/tmp/{uuid.uuid4()}_candidate.pdf"
+    await reference_file.save(ref_path)
+    await candidate_file.save(cand_path)
+
+    # Extract sections using Document Intelligence
+    endpoint = app_settings.document_intelligence.endpoint
+    key = app_settings.document_intelligence.key
+    doc_client = DocumentIntelligenceClient(endpoint, AzureKeyCredential(key))
+    async def extract_sections(file_path):
+        with open(file_path, "rb") as f:
+            poller = await doc_client.begin_analyze_document("prebuilt-read", document=f)
+            result = await poller.result()
+        # Group by paragraphs or headings
+        sections = []
+        for i, paragraph in enumerate(result.paragraphs):
+            sections.append({
+                "sectionId": str(i+1),
+                "text": paragraph.content
+            })
+        return sections
+
+    ref_sections = await extract_sections(ref_path)
+    cand_sections = await extract_sections(cand_path)
+
+    # Match sections by order (can be improved by heading)
+    comparison_results = []
+    total_score = 0
+    for i, ref_sec in enumerate(ref_sections):
+        cand_sec = cand_sections[i] if i < len(cand_sections) else {"text": ""}
+        # Call Azure OpenAI for semantic comparison
+        prompt = f"""
+        Compare the following reference section and candidate section. Are they semantically similar? If not, what is missing? Respond with matchScore (1, 0.5, or 0) and explanation.\n\nReference: {ref_sec['text']}\nCandidate: {cand_sec['text']}
+        """
+        ai_foundry_client = await init_ai_foundry_client()
+        response = await ai_foundry_client.chat.completions.create(
+            model=app_settings.azure_openai.model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0,
+            max_tokens=256,
+        )
+        content = response.choices[0].message.content.strip()
+        # Parse response
+        try:
+            result_json = json.loads(content)
+            match_score = float(result_json.get("matchScore", 0))
+            explanation = result_json.get("explanation", "")
+        except Exception:
+            match_score = 0
+            explanation = content
+        status = "✅" if match_score == 1 else ("⚠️" if match_score == 0.5 else "❌")
+        comparison_results.append({
+            "sectionId": ref_sec["sectionId"],
+            "matchScore": match_score,
+            "status": status,
+            "explanation": explanation
+        })
+        total_score += match_score
+
+    compliance_score = int(100 * total_score / max(1, len(ref_sections)))
+    result = {
+        "complianceScore": compliance_score,
+        "sections": comparison_results
+    }
+    # Clean up temp files
+    os.remove(ref_path)
+    os.remove(cand_path)
+    return jsonify(result), 200
 import json
 import logging
 import os

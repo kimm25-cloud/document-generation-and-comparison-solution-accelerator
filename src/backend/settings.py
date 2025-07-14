@@ -14,10 +14,22 @@ from typing_extensions import Self
 
 from backend.utils import generateFilterString, parse_multi_columns
 
+
 DOTENV_PATH = os.environ.get(
     "DOTENV_PATH", os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env")
 )
 MINIMUM_SUPPORTED_AZURE_OPENAI_PREVIEW_API_VERSION = "2025-01-01-preview"
+
+# Document Intelligence settings
+class _DocumentIntelligenceSettings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_prefix="DOCUMENT_INTELLIGENCE_",
+        env_file=DOTENV_PATH,
+        extra="ignore",
+        env_ignore_empty=True,
+    )
+    endpoint: Optional[str] = None
+    key: Optional[str] = None
 
 
 class _UiSettings(BaseSettings):
@@ -359,12 +371,14 @@ class _BaseSettings(BaseSettings):
     use_promptflow: bool = False
 
 
+
 class _AppSettings(BaseModel):
     base_settings: _BaseSettings = _BaseSettings()
     azure_openai: _AzureOpenAISettings = _AzureOpenAISettings()
     azure_ai: _AzureAISettings = _AzureAISettings()
     search: _SearchCommonSettings = _SearchCommonSettings()
     ui: Optional[_UiSettings] = _UiSettings()
+    document_intelligence: Optional[_DocumentIntelligenceSettings] = _DocumentIntelligenceSettings()
 
     # Constructed properties
     chat_history: Optional[_ChatHistorySettings] = None
@@ -375,20 +389,16 @@ class _AppSettings(BaseModel):
     def set_promptflow_settings(self) -> Self:
         try:
             self.promptflow = _PromptflowSettings()
-
         except ValidationError:
             self.promptflow = None
-
         return self
 
     @model_validator(mode="after")
     def set_chat_history_settings(self) -> Self:
         try:
             self.chat_history = _ChatHistorySettings()
-
         except ValidationError:
             self.chat_history = None
-
         return self
 
     @model_validator(mode="after")
@@ -404,9 +414,7 @@ class _AppSettings(BaseModel):
                 logging.warning(
                     "No datasource configuration found in the environment -- calls will be made to Azure OpenAI without grounding data."
                 )
-
             return self
-
         except ValidationError:
             logging.warning(
                 "No datasource configuration found in the environment -- calls will be made to Azure OpenAI without grounding data."
