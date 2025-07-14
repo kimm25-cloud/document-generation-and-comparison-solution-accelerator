@@ -1,6 +1,6 @@
 from quart import Blueprint
-bp = Blueprint('main', __name__)
-
+#bp = Blueprint('main', __name__) will remove this second bp = …  never actually register the /compare-documents route. Quart never knows it exists, so it returns a 404
+bp = Blueprint("routes", __name__, static_folder="static", template_folder="static")
 
 from azure.ai.documentintelligence.aio import DocumentIntelligenceClient
 from azure.core.credentials import AzureKeyCredential
@@ -121,7 +121,7 @@ from backend.api.agent.section_agent_factory import SectionAgentFactory
 from backend.api.agent.browse_agent_factory import BrowseAgentFactory
 from backend.api.agent.template_agent_factory import TemplateAgentFactory
 
-bp = Blueprint("routes", __name__, static_folder="static", template_folder="static")
+#bp = Blueprint("routes", __name__, static_folder="static", template_folder="static")
 
 # Check if the Application Insights Instrumentation Key is set in the environment variables
 instrumentation_key = os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING")
