@@ -1,3 +1,7 @@
+from quart import Blueprint
+bp = Blueprint('main', __name__)
+
+
 from azure.ai.documentintelligence.aio import DocumentIntelligenceClient
 from azure.core.credentials import AzureKeyCredential
 # Semantic Document Comparison API
