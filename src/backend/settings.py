@@ -37,11 +37,11 @@ class _UiSettings(BaseSettings):
         env_prefix="UI_", env_file=DOTENV_PATH, extra="ignore", env_ignore_empty=True
     )
 
-    title: str = "Document Generation"
+    title: str = "Document Assistant"
     logo: Optional[str] = None
     chat_logo: Optional[str] = None
-    chat_title: str = "Document Generation"
-    chat_description: str = "AI-powered document search and creation."
+    chat_title: str = "Document Assistant"
+    chat_description: str = "AI-powered document search, creation and comparison."
     favicon: str = "/favicon.ico"
     show_share_button: bool = False
 

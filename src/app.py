@@ -1,12 +1,21 @@
-from quart import Blueprint
-#bp = Blueprint('main', __name__) will remove this second bp = …  never actually register the /compare-documents route. Quart never knows it exists, so it returns a 404
-bp = Blueprint("routes", __name__, static_folder="static", template_folder="static")
-
 from azure.ai.documentintelligence.aio import DocumentIntelligenceClient
 from azure.core.credentials import AzureKeyCredential
-# Semantic Document Comparison API
-@bp.route("/compare-documents", methods=["POST"])
-async def compare_documents():
+
+# Import necessary modules for the compare_documents function
+from quart import Blueprint, request, jsonify
+import uuid
+import os
+import json
+import logging
+import asyncio
+import numpy as np
+
+# Create Blueprint for document comparison
+bp = Blueprint("routes", __name__, static_folder="static", template_folder="static")
+
+# Document Comparison API
+@bp.route("/compare-documents", methods=["POST"]) # Decorator 
+async def compare_documents(): # Function that is being Decorated
     data = await request.files
     reference_file = data.get("reference")
     candidate_file = data.get("candidate")
@@ -14,64 +23,225 @@ async def compare_documents():
         return jsonify({"error": "Both reference and candidate documents are required."}), 400
 
     # Save files temporarily
-    ref_path = f"/tmp/{uuid.uuid4()}_reference.pdf"
+    ref_path = f"/tmp/{uuid.uuid4()}_reference.pdf" #uuid.uuid4() to generate unique Identifier so each request gets its own unique temporary files
     cand_path = f"/tmp/{uuid.uuid4()}_candidate.pdf"
     await reference_file.save(ref_path)
     await candidate_file.save(cand_path)
 
     # Extract sections using Document Intelligence
-    endpoint = app_settings.document_intelligence.endpoint
-    key = app_settings.document_intelligence.key
-    doc_client = DocumentIntelligenceClient(endpoint, AzureKeyCredential(key))
-    async def extract_sections(file_path):
-        with open(file_path, "rb") as f:
-            poller = await doc_client.begin_analyze_document("prebuilt-read", body=f)
-            result = await poller.result()
-        # Group by paragraphs or headings
-        sections = []
-        for i, paragraph in enumerate(result.paragraphs):
-            sections.append({
-                "sectionId": str(i+1),
-                "text": paragraph.content
-            })
-        return sections
+    endpoint = app_settings.document_intelligence.endpoint or os.getenv("DOCUMENT_INTELLIGENCE_ENDPOINT")
+    key = app_settings.document_intelligence.key or os.getenv("DOCUMENT_INTELLIGENCE_KEY") # Connecting to Azure document reading service with my credentials
+    
+    if not endpoint or not key:
+        return jsonify({"error": "Document Intelligence configuration is missing. Please check DOCUMENT_INTELLIGENCE_ENDPOINT and DOCUMENT_INTELLIGENCE_KEY environment variables."}), 500
+    
+    # Use async context manager for proper cleanup
+    async with DocumentIntelligenceClient(endpoint, AzureKeyCredential(key)) as doc_client:
+        async def extract_sections(file_path):
+            with open(file_path, "rb") as f:
+                poller = await doc_client.begin_analyze_document("prebuilt-read", body=f)
+                result = await poller.result()
+            # Group by paragraphs 
+            sections = []
+            for i, paragraph in enumerate(result.paragraphs):
+                sections.append({
+                    "sectionId": str(i+1),
+                    "text": paragraph.content
+                })
+            return sections
+        
+        # Extract sections from both docs - applying it
+        ref_sections = await extract_sections(ref_path)
+        cand_sections = await extract_sections(cand_path)
 
-    ref_sections = await extract_sections(ref_path)
-    cand_sections = await extract_sections(cand_path)
-
-    # Match sections by order (can be improved by heading)
+    # Match sections by order 
     comparison_results = []
     total_score = 0
-    for i, ref_sec in enumerate(ref_sections):
-        cand_sec = cand_sections[i] if i < len(cand_sections) else {"text": ""}
-        # Call Azure OpenAI for semantic comparison
-        prompt = f"""
-        Compare the following reference section and candidate section. Are they semantically similar? If not, what is missing? Respond with matchScore (1, 0.5, or 0) and explanation.\n\nReference: {ref_sec['text']}\nCandidate: {cand_sec['text']}
-        """
-        ai_foundry_client = await init_ai_foundry_client()
-        response = await ai_foundry_client.chat.completions.create(
-            model=app_settings.azure_openai.model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0,
-            max_tokens=256,
-        )
-        content = response.choices[0].message.content.strip()
-        # Parse response
-        try:
-            result_json = json.loads(content)
-            match_score = float(result_json.get("matchScore", 0))
-            explanation = result_json.get("explanation", "")
-        except Exception:
-            match_score = 0
-            explanation = content
-        status = "✅" if match_score == 1 else ("⚠️" if match_score == 0.5 else "❌")
-        comparison_results.append({
-            "sectionId": ref_sec["sectionId"],
-            "matchScore": match_score,
-            "status": status,
-            "explanation": explanation
-        })
-        total_score += match_score
+    
+    # Create a single AI client for all comparisons and properly manage it
+    ai_foundry_client = await init_ai_foundry_client()
+    try:
+        # Pre-compute embeddings for all sections (more efficient)
+        async def get_embeddings(texts):
+            """Get embeddings for semantic similarity"""
+            try:
+                response = await ai_foundry_client.embeddings.create(
+                    model="text-embedding-ada-002",  
+                    input=texts
+                )
+                return [embedding.embedding for embedding in response.data]
+            except Exception as e:
+                logging.warning(f"Embeddings failed: {e}")
+                return None
+        
+        # Get embeddings for all sections
+        ref_texts = [sec['text'] for sec in ref_sections]
+        cand_texts = [sec['text'] for sec in cand_sections]
+        
+        ref_embeddings = await get_embeddings(ref_texts)
+        cand_embeddings = await get_embeddings(cand_texts)
+        
+        def cosine_similarity(vec1, vec2):
+            """Calculate cosine similarity between two vectors"""
+            try:
+                return np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2))
+            except (ImportError, AttributeError):
+                # Fallback to manual calculation if numpy not available
+                dot_product = sum(a * b for a, b in zip(vec1, vec2))
+                magnitude1 = sum(a * a for a in vec1) ** 0.5
+                magnitude2 = sum(b * b for b in vec2) ** 0.5
+                return dot_product / (magnitude1 * magnitude2) if magnitude1 * magnitude2 > 0 else 0
+        
+        async def enhanced_compare_section(i, ref_sec, cand_sec, semantic_score=None):
+            """Enhanced comparison with semantic similarity pre-computation"""
+            
+            # Fast semantic similarity check
+            if semantic_score is not None:
+                if semantic_score > 0.95:  # Very high similarity
+                    return {
+                        "sectionId": ref_sec["sectionId"],
+                        "matchScore": 1.0,
+                        "semanticSimilarity": semantic_score,
+                        "status": "✅",
+                        "explanation": f"Sections are semantically identical (similarity: {semantic_score:.3f})",
+                        "method": "embedding_only"
+                    }
+                elif semantic_score < 0.3:  # Very low similarity
+                    return {
+                        "sectionId": ref_sec["sectionId"],
+                        "matchScore": 0.0,
+                        "semanticSimilarity": semantic_score,
+                        "status": "❌",
+                        "explanation": f"Sections are semantically different (similarity: {semantic_score:.3f})",
+                        "method": "embedding_only"
+                    }
+            
+            # For moderate similarity, use AI for detailed analysis
+            similarity_text = f"{semantic_score:.3f}" if semantic_score is not None else "unknown"
+            prompt = f"""
+            You are an expert document analyst. The sections below have a semantic similarity of {similarity_text}.
+            Perform a detailed comparison to determine the exact match quality.
+            
+            REFERENCE SECTION (Ground Truth):
+            {ref_sec['text']}
+            
+            CANDIDATE SECTION (To be evaluated):
+            {cand_sec['text']}
+            
+            
+            Given the semantic similarity score of {similarity_text}, focus on:
+            1. **Content Accuracy**: Are the facts and details correct?
+            2. **Completeness**: What key information is missing?
+            3. **Context Preservation**: Is the meaning preserved?
+            4. **Critical Differences**: What are the most important discrepancies?
+            
+            Respond with a JSON object:
+            {{
+                "matchScore": <number between 0.0-1.0>,
+                "contentAccuracy": <number between 0.0-1.0>,
+                "completeness": <number between 0.0-1.0>,
+                "explanation": "<detailed analysis>",
+                "keyDifferences": ["<list of important differences>"],
+                "confidence": <number between 0.0-1.0>
+            }}
+            """
+            
+            try:
+                response = await ai_foundry_client.chat.completions.create(
+                    model=app_settings.azure_openai.model,
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0.1,  # Lower temperature for more consistent analysis
+                    max_tokens=512,   # More tokens for detailed analysis
+                    timeout=30.0
+                )
+            except asyncio.CancelledError:
+                return {
+                    "sectionId": ref_sec["sectionId"],
+                    "matchScore": 0,
+                    "semanticSimilarity": semantic_score or 0,
+                    "status": "❌",
+                    "explanation": "Request was cancelled - possibly due to timeout",
+                    "method": "ai_cancelled"
+                }
+            except Exception as e:
+                logging.error(f"Error comparing section {i}: {e}")
+                return {
+                    "sectionId": ref_sec["sectionId"],
+                    "matchScore": 0,
+                    "semanticSimilarity": semantic_score or 0,
+                    "status": "❌",
+                    "explanation": f"Comparison failed: {str(e)}",
+                    "method": "ai_error"
+                }
+                
+            content = response.choices[0].message.content.strip()
+            
+            # Parse enhanced response
+            try:
+                result_json = json.loads(content)
+                match_score = float(result_json.get("matchScore", 0))
+                explanation = result_json.get("explanation", "")
+                
+                # Combine AI analysis with semantic similarity
+                final_score = (match_score + semantic_score) / 2 if semantic_score else match_score
+                
+                status = "✅" if final_score >= 0.8 else ("⚠️" if final_score >= 0.5 else "❌")
+                
+                return {
+                    "sectionId": ref_sec["sectionId"],
+                    "matchScore": final_score,
+                    "semanticSimilarity": semantic_score or 0,
+                    "aiAnalysis": match_score,
+                    "contentAccuracy": result_json.get("contentAccuracy", 0),
+                    "completeness": result_json.get("completeness", 0),
+                    "status": status,
+                    "explanation": explanation,
+                    "keyDifferences": result_json.get("keyDifferences", []),
+                    "confidence": result_json.get("confidence", 0.5),
+                    "method": "hybrid_ai_embedding"
+                }
+            except Exception as e:
+                logging.warning(f"Failed to parse AI response: {e}")
+                fallback_score = semantic_score or 0
+                return {
+                    "sectionId": ref_sec["sectionId"],
+                    "matchScore": fallback_score,
+                    "semanticSimilarity": semantic_score or 0,
+                    "status": "⚠️",
+                    "explanation": f"AI analysis failed, using semantic similarity: {content}",
+                    "method": "embedding_fallback"
+                }
+        
+        # Process sections with hybrid approach
+        comparison_results = []
+        total_score = 0
+        
+        for i, ref_sec in enumerate(ref_sections):
+            cand_sec = cand_sections[i] if i < len(cand_sections) else {"text": ""}
+            
+            # Calculate semantic similarity if embeddings are available
+            semantic_score = None
+            if ref_embeddings and cand_embeddings and i < len(cand_embeddings):
+                semantic_score = cosine_similarity(ref_embeddings[i], cand_embeddings[i])
+            
+            result = await enhanced_compare_section(i, ref_sec, cand_sec, semantic_score)
+            comparison_results.append(result)
+            total_score += result["matchScore"]
+            
+        # Option 2: Parallel processing (uncomment to enable)
+        # This would be faster but uses more API quota simultaneously
+        # tasks = []
+        # for i, ref_sec in enumerate(ref_sections):
+        #     cand_sec = cand_sections[i] if i < len(cand_sections) else {"text": ""}
+        #     tasks.append(compare_section(i, ref_sec, cand_sec))
+        # 
+        # comparison_results = await asyncio.gather(*tasks)
+        # total_score = sum(result["matchScore"] for result in comparison_results)
+        
+    finally:
+        # Ensure the AI client is properly closed
+        if hasattr(ai_foundry_client, 'close'):
+            await ai_foundry_client.close()
 
     compliance_score = int(100 * total_score / max(1, len(ref_sections)))
     result = {
@@ -90,6 +260,13 @@ import re
 import ast
 import requests
 import asyncio
+import asyncio
+import json
+import logging
+import os
+import re
+import ast
+import uuid
 from typing import Dict, Any, AsyncGenerator
 
 from azure.identity.aio import DefaultAzureCredential
@@ -120,8 +297,6 @@ from azure.ai.agents.models import (
 from backend.api.agent.section_agent_factory import SectionAgentFactory
 from backend.api.agent.browse_agent_factory import BrowseAgentFactory
 from backend.api.agent.template_agent_factory import TemplateAgentFactory
-
-#bp = Blueprint("routes", __name__, static_folder="static", template_folder="static")
 
 # Check if the Application Insights Instrumentation Key is set in the environment variables
 instrumentation_key = os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING")

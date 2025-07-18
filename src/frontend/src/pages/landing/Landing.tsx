@@ -53,7 +53,7 @@ const Landing = () => {
                         }} />
                     }
                     title="Compare"
-                    description="Compare two documents for semantic similarity and compliance."
+                    description="Let AI compare two documents"
                     urlSuffix="/compare"
                 />
             </Stack>
