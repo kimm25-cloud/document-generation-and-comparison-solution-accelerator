@@ -12,4 +12,5 @@ myenv
 scriptsenv/
 
 scriptenv
-pdf
+pdfset-app-config.json
+src/deploy.zip
