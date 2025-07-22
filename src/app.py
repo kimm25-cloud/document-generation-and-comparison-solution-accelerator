@@ -95,7 +95,7 @@ async def compare_documents(): # Function that is being Decorated
         async def enhanced_compare_section(i, ref_sec, cand_sec, semantic_score=None):
             """Enhanced comparison with semantic similarity pre-computation"""
             
-            # Fast semantic similarity check
+            # Faster semantic similarity check
             if semantic_score is not None:
                 if semantic_score > 0.95:  # Very high similarity
                     return {
@@ -227,16 +227,6 @@ async def compare_documents(): # Function that is being Decorated
             result = await enhanced_compare_section(i, ref_sec, cand_sec, semantic_score)
             comparison_results.append(result)
             total_score += result["matchScore"]
-            
-        # Option 2: Parallel processing (uncomment to enable)
-        # This would be faster but uses more API quota simultaneously
-        # tasks = []
-        # for i, ref_sec in enumerate(ref_sections):
-        #     cand_sec = cand_sections[i] if i < len(cand_sections) else {"text": ""}
-        #     tasks.append(compare_section(i, ref_sec, cand_sec))
-        # 
-        # comparison_results = await asyncio.gather(*tasks)
-        # total_score = sum(result["matchScore"] for result in comparison_results)
         
     finally:
         # Ensure the AI client is properly closed
